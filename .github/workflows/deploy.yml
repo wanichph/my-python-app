@@ -1,0 +1,111 @@
+name: CI/CD Pipeline - Build Docker & Deploy with Helm
+
+on:
+  push:
+    branches:
+      - main              # ทำงานอัตโนมัติเมื่อมีการ push โค้ดเข้า main branch
+  workflow_dispatch:      # ปุ่มกดรันแบบ Manual บน GitHub UI
+
+env:
+  REGISTRY: ghcr.io
+  # แปลงชื่อ repo เป็นตัวพิมพ์เล็กอัตโนมัติเพื่อป้องกัน Error จาก GHCR
+  IMAGE_NAME: ${{ github.repository }}
+  NAMESPACE: py-app-ns
+  HELM_RELEASE_NAME: my-release
+  CHART_PATH: ./python-app-chart
+
+jobs:
+  # ===============================================================
+  # JOB 1: Build Docker Image & Push to GHCR
+  # ===============================================================
+  build-and-push:
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+      image_repository: ${{ steps.image_repo.outputs.repo }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Convert Repository Name to Lowercase
+        id: image_repo
+        run: |
+          echo "repo=${GHCR_REGISTRY}/${GITHUB_REPOSITORY,,}" >> $GITHUB_OUTPUT
+        env:
+          GHCR_REGISTRY: ${{ env.REGISTRY }}
+
+      - name: Log in to GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Extract Metadata for Docker (Tags & Labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.image_repo.outputs.repo }}
+          tags: |
+            type=sha,prefix=,format=short
+            type=raw,value=latest
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  # ===============================================================
+  # JOB 2: Deploy to Kubernetes Cluster via Helm
+  # ===============================================================
+  deploy-to-k8s:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.13.0'
+
+      - name: Set up Kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Create Namespace & ImagePullSecret on Cluster
+        run: |
+          # 1. สร้าง Namespace ถ้ายังไม่มี
+          kubectl create namespace ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+
+          # 2. สร้าง/อัปเดต ImagePullSecret สำหรับ GHCR
+          kubectl create secret docker-registry ghcr-secret \
+            --docker-server=${{ env.REGISTRY }} \
+            --docker-username=${{ github.actor }} \
+            --docker-password=${{ secrets.GHCR_TOKEN }} \
+            --namespace=${{ env.NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy / Upgrade via Helm
+        run: |
+          IMAGE_REPO="${{ needs.build-and-push.outputs.image_repository }}"
+          IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
+
+          echo "Deploying Image: ${IMAGE_REPO}:${IMAGE_TAG}"
+
+          helm upgrade --install ${{ env.HELM_RELEASE_NAME }} ${{ env.CHART_PATH }} \
+            --namespace ${{ env.NAMESPACE }} \
+            --set webApp.image.repository="${IMAGE_REPO}" \
+            --set webApp.image.tag="${IMAGE_TAG}" \
+            --wait \
+            --timeout 5m

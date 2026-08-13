@@ -1,0 +1,11 @@
+# Web Framework
+Flask==3.0.2
+
+# WSGI Server สำหรับ Production
+gunicorn==21.2.0
+
+# Database Driver สำหรับเชื่อมต่อ PostgreSQL
+psycopg2-binary==2.9.9
+
+# Utilities สำหรับจัดการ Environment Variables (ทางเลือกเพิ่มเติม)
+python-dotenv==1.0.1
