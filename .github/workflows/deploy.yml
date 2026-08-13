@@ -77,23 +77,23 @@ jobs:
         with:
           version: 'v3.13.0'
 
-      - name: Set up Kubeconfig
-        run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
-          chmod 600 ~/.kube/config
-
+#      - name: Set up Kubeconfig
+#        run: |
+#          mkdir -p ~/.kube
+#          echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+#     
+#   chmod 600 ~/.kube/config
       - name: Create Namespace & ImagePullSecret on Cluster
         run: |
           # 1. สร้าง Namespace ถ้ายังไม่มี
-          kubectl create namespace ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create namespace dev --dry-run=client -o yaml | kubectl apply -f -
 
-          # 2. สร้าง/อัปเดต ImagePullSecret สำหรับ GHCR
+          # 2. สร้าง ImagePullSecret สำหรับดึง Image จาก GHCR
           kubectl create secret docker-registry ghcr-secret \
-            --docker-server=${{ env.REGISTRY }} \
+            --namespace=dev \
+            --docker-server=ghcr.io \
             --docker-username=${{ github.actor }} \
             --docker-password=${{ secrets.GHCR_TOKEN }} \
-            --namespace=${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Deploy / Upgrade via Helm
