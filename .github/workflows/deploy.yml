@@ -12,7 +12,7 @@ env:
   IMAGE_NAME: ${{ github.repository }}
   NAMESPACE: py-app-ns
   HELM_RELEASE_NAME: my-release
-  CHART_PATH: ./python-app-chart
+  CHART_PATH: "./k8s"
 
 jobs:
   # ===============================================================
