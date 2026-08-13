@@ -96,16 +96,21 @@ jobs:
             --docker-password=${{ secrets.GHCR_TOKEN }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Deploy / Upgrade via Helm
+      - name: Deploy to Kubernetes Cluster
         run: |
-          IMAGE_REPO="${{ needs.build-and-push.outputs.image_repository }}"
-          IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
+          # สั่ง apply ไฟล์ yaml ทั้งหมดในโฟลเดอร์ k8s เรียงตามลำดับไฟล์
+          kubectl apply -f ./k8s/
 
-          echo "Deploying Image: ${IMAGE_REPO}:${IMAGE_TAG}"
-
-          helm upgrade --install ${{ env.HELM_RELEASE_NAME }} ${{ env.CHART_PATH }} \
-            --namespace ${{ env.NAMESPACE }} \
-            --set webApp.image.repository="${IMAGE_REPO}" \
-            --set webApp.image.tag="${IMAGE_TAG}" \
-            --wait \
-            --timeout 5m
+#      - name: Deploy / Upgrade via Helm
+#        run: |
+#          IMAGE_REPO="${{ needs.build-and-push.outputs.image_repository }}"
+#          IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
+#
+#          echo "Deploying Image: ${IMAGE_REPO}:${IMAGE_TAG}"
+#
+#          helm upgrade --install ${{ env.HELM_RELEASE_NAME }} ${{ env.CHART_PATH }} \
+#            --namespace ${{ env.NAMESPACE }} \
+#            --set webApp.image.repository="${IMAGE_REPO}" \
+#            --set webApp.image.tag="${IMAGE_TAG}" \
+#            --wait \
+#            --timeout 5m
